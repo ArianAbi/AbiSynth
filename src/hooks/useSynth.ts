@@ -22,7 +22,7 @@ export default function useSynth() {
 
     const activeOscillatorsRefs = useRef<Map<string, OscillatorNode>>(new Map())
 
-    const totalGainAmount = useRef(1)
+    const gainNode = useRef<GainNode | null>(null)
 
     const [isPlaying, setIsPlaying] = useState<Map<string, boolean>>(() => {
         const map = new Map()
@@ -35,7 +35,14 @@ export default function useSynth() {
 
 
     useEffect(() => {
-        console.log(activeOscillatorsRefs.current);
+        if (!audioCtxInstance) return
+        if (!gainNode.current) {
+            gainNode.current = audioCtxInstance.createGain()
+        }
+
+        const gainValue = 1 / Math.max(activeOscillatorsRefs.current.size, 1)
+
+        gainNode.current.gain.value = gainValue
 
     }, [activeOscillatorsRefs.current])
 
@@ -46,8 +53,8 @@ export default function useSynth() {
 
         oscillatorVoices.forEach(osc => {
             if (osc.enabled) {
-                if (audioCtxInstance) {
-                    const node = createOscillator(audioCtxInstance, osc, frequency, totalGainAmount.current)
+                if (audioCtxInstance && gainNode.current) {
+                    const node = createOscillator(audioCtxInstance, osc, frequency, gainNode.current)
                     activeNodes.set(id, node)
                     node.start(audioCtxInstance.currentTime)
                 }
@@ -88,10 +95,7 @@ export default function useSynth() {
     }
 }
 
-function createOscillator(audioCtx: AudioContext, config: OscillatorConfigType, frequency: number, gainAmount: number) {
-    const gain = audioCtx.createGain()
-    gain.gain.value = gainAmount
-
+function createOscillator(audioCtx: AudioContext, config: OscillatorConfigType, frequency: number, gain: GainNode) {
     const oscillator = audioCtx.createOscillator()
     oscillator.type = config.type
     oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime)

@@ -9,7 +9,6 @@ export default function PianoKey({ note, synth }: { note: NoteConfigType, synth:
 
         if (e.key == note.hotkey.toLocaleLowerCase()) {
             held.current = true
-            console.log("DOWN");
 
             onKeyDown()
         }
@@ -23,6 +22,7 @@ export default function PianoKey({ note, synth }: { note: NoteConfigType, synth:
     }
 
     useEffect(() => {
+
         window.addEventListener("keydown", HandleKeydown)
         window.addEventListener("keyup", HandleKeyup)
 
