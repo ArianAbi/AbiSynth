@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { NotesConfig } from "../configs/NotesConfig";
 
 let audioCtxInstance: AudioContext | null = null;
 
@@ -18,51 +19,70 @@ export default function useSynth() {
         { id: 0, type: 'sine', detune: 0, enabled: true }
     ])
 
-    const oscillatorsRefs = useRef<OscillatorNode[]>([])
+    const oscillatorsRefs = useRef<{ node: OscillatorNode, id: string }[]>([])
 
-    const [isPlaying, setIsPlaying] = useState(false)
+    const [isPlaying, setIsPlaying] = useState<Map<string, boolean>>(() => {
+        const map = new Map()
+        NotesConfig.keyMaps.forEach(note => {
+            map.set(note.name, false)
+        })
 
-    function PlayOscillators() {
-        if (isPlaying) return
+        return map
+    })
+
+    function PlayOscillator(frequency: number, id: string) {
         if (audioCtxInstance?.state == 'suspended') audioCtxInstance.resume()
 
-        const nodes: OscillatorNode[] = []
+        const nodes: { node: OscillatorNode, id: string }[] = []
 
         oscillators.forEach(osc => {
             if (osc.enabled) {
                 if (audioCtxInstance) {
-                    const node = createOscillator(audioCtxInstance, osc, 440)
-                    nodes.push(node)
+                    const node = createOscillator(audioCtxInstance, osc, frequency)
+                    nodes.push({ node, id })
                     node.start(audioCtxInstance.currentTime)
                 }
             }
         })
 
         oscillatorsRefs.current = nodes
-        setIsPlaying(true)
+        setIsPlaying(prev => {
+            const newMap = new Map(prev)
+            newMap.set(id, true)
+
+            return newMap
+        })
     }
 
-    function StopOscillators() {
-        if (!isPlaying) return
+    function StopOscillator(id: string) {
+        // if (!isPlaying) return
+        // if (!isPlaying.current) return
 
         oscillatorsRefs.current.forEach(osc => {
-            try {
-                osc.stop(audioCtxInstance?.currentTime)
-            } catch (err) {
-                console.log(err);
+            if (osc.id == id) {
+                try {
+                    osc.node.stop(audioCtxInstance?.currentTime)
+                } catch (err) {
+                    console.log(err);
+                }
             }
         })
 
         oscillatorsRefs.current = []
-        setIsPlaying(false)
+        setIsPlaying(prev => {
+            const newMap = new Map(prev)
+            newMap.set(id, false)
+
+            return newMap
+        })
     }
 
 
     return {
         audioCtx: audioCtxInstance,
-        PlayOscillators,
-        StopOscillators,
-        isPlaying
+        PlayOscillator,
+        StopOscillator,
+        isPlaying: isPlaying
     }
 }
 

@@ -1,4 +1,6 @@
 import useSynth from "./hooks/useSynth"
+import { NotesConfig } from "./configs/NotesConfig"
+import PianoKey from "./components/PianoKey"
 
 
 function App() {
@@ -8,19 +10,16 @@ function App() {
     <div>
       <h1>AbiSynth</h1>
 
-      <button onClick={() => {
-        if (synth.isPlaying) {
-          console.log("im called - stop");
-
-          synth.StopOscillators()
-        } else {
-          console.log("im called - start");
-
-          synth.PlayOscillators()
-        }
-      }}>
-        {!synth.isPlaying ? "Make a Sound" : "Stop"}
-      </button>
+      {NotesConfig.keyMaps.map((note, _i) => {
+        return (
+          <PianoKey
+            note={note}
+            synth={synth}
+            key={_i}
+          />
+        )
+      })
+      }
     </div>
   )
 }
