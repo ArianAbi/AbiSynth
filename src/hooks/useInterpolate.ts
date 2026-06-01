@@ -10,7 +10,15 @@ export default function useInterpolate() {
         function interpolate(now: number) {
             const t = Math.min((now - startTime) / duration, 1)
 
-            onUpdate(start + (end - start) * t)
+            const calculatedValue = parseFloat((start + (end - start) * t).toPrecision(3))
+
+            onUpdate(
+                duration < 10
+                    ?
+                    end
+                    :
+                    calculatedValue
+            )
 
             if (t < 1) instanceRef.current = requestAnimationFrame(interpolate)
             else onUpdate(end)

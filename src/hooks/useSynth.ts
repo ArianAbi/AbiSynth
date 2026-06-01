@@ -10,7 +10,7 @@ export interface OscillatorConfigType {
     enabled: boolean
 }
 
-export default function useSynth() {
+export default function useSynth(attack: number, release: number) {
     if (!audioCtxInstance) {
         audioCtxInstance = new AudioContext();
     }
@@ -22,7 +22,8 @@ export default function useSynth() {
 
     const activeOscillatorsRefs = useRef<Map<string, OscillatorNode>>(new Map())
 
-    const gainNode = useRef<GainNode | null>(null)
+    const noteGainNode = useRef<GainNode | null>(null)
+    const envelopeGainNode = useRef<GainNode | null>(null)
 
     const [isPlaying, setIsPlaying] = useState<Map<string, boolean>>(() => {
         const map = new Map()
@@ -33,16 +34,27 @@ export default function useSynth() {
         return map
     })
 
+    useEffect(() => {
+        if (!audioCtxInstance) return
+        if (!envelopeGainNode.current) {
+            envelopeGainNode.current = audioCtxInstance.createGain()
+            envelopeGainNode.current.gain.value = .01
+
+            envelopeGainNode.current.connect(audioCtxInstance.destination)
+        }
+    }, [])
 
     useEffect(() => {
         if (!audioCtxInstance) return
-        if (!gainNode.current) {
-            gainNode.current = audioCtxInstance.createGain()
+
+        // handles gain when multiple notes are played at once
+        if (!noteGainNode.current) {
+            noteGainNode.current = audioCtxInstance.createGain()
         }
 
-        const gainValue = 1 / Math.max(activeOscillatorsRefs.current.size, 1)
+        const noteGainValue = 1 / Math.max(activeOscillatorsRefs.current.size, 1)
 
-        gainNode.current.gain.value = gainValue
+        noteGainNode.current.gain.value = noteGainValue
 
     }, [activeOscillatorsRefs.current])
 
@@ -53,10 +65,25 @@ export default function useSynth() {
 
         oscillatorVoices.forEach(osc => {
             if (osc.enabled) {
-                if (audioCtxInstance && gainNode.current) {
-                    const node = createOscillator(audioCtxInstance, osc, frequency, gainNode.current)
-                    activeNodes.set(id, node)
-                    node.start(audioCtxInstance.currentTime)
+                if (audioCtxInstance && noteGainNode.current && envelopeGainNode.current) {
+                    const oscNode = createOscillator(
+                        audioCtxInstance,
+                        osc,
+                        frequency
+                    )
+
+                    oscNode.connect(noteGainNode.current)
+                    noteGainNode.current.connect(envelopeGainNode.current)
+
+                    const now = audioCtxInstance.currentTime
+
+                    //envelope attack
+                    envelopeGainNode.current.gain.cancelScheduledValues(now);
+                    envelopeGainNode.current.gain.setValueAtTime(0, now)
+                    envelopeGainNode.current.gain.linearRampToValueAtTime(1, now + attack)
+
+                    activeNodes.set(id, oscNode)
+                    oscNode.start(audioCtxInstance.currentTime)
                 }
             }
         })
@@ -74,9 +101,22 @@ export default function useSynth() {
     function StopOscillator(id: string) {
         // if (!isPlaying) return
         // if (!isPlaying.current) return
+        if (!audioCtxInstance) return
+        if (!envelopeGainNode.current) return
 
-        activeOscillatorsRefs.current.get(id)?.stop(audioCtxInstance?.currentTime)
-        activeOscillatorsRefs.current.delete(id)
+        const currentGain = envelopeGainNode.current.gain.value
+
+        const now = audioCtxInstance.currentTime
+
+        //envelope release
+        envelopeGainNode.current.gain.cancelScheduledValues(now);
+        envelopeGainNode.current.gain.setValueAtTime(currentGain, now)
+        envelopeGainNode.current.gain.linearRampToValueAtTime(0, now + release)
+
+        setTimeout(() => {
+            activeOscillatorsRefs.current.get(id)?.stop(audioCtxInstance?.currentTime)
+            activeOscillatorsRefs.current.delete(id)
+        }, release * 1000);
 
         setIsPlaying(prev => {
             const newMap = new Map(prev)
@@ -95,15 +135,11 @@ export default function useSynth() {
     }
 }
 
-function createOscillator(audioCtx: AudioContext, config: OscillatorConfigType, frequency: number, gain: GainNode) {
+function createOscillator(audioCtx: AudioContext, config: OscillatorConfigType, frequency: number) {
     const oscillator = audioCtx.createOscillator()
     oscillator.type = config.type
     oscillator.frequency.setValueAtTime(frequency, audioCtx.currentTime)
     oscillator.detune.setValueAtTime(config.detune, audioCtx.currentTime)
-
-
-    oscillator.connect(gain)
-    gain.connect(audioCtx.destination)
 
     return oscillator
 }
